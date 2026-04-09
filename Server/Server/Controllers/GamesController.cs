@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.DTO.Game;
+using Server.DTOs;
 using Server.Models;
 
 namespace Server.Controllers
@@ -20,33 +21,43 @@ namespace Server.Controllers
         [HttpGet("all")]
         public async Task<IActionResult> GetAllGames()
         {
-            var games = await _context.Games.ToListAsync();
-
             var result = await _context.Games
-     .Select(game => new GameDto
-     {
-         Id = game.Id,
-         Title = game.Title,
-         Description = game.Description,
-         Price = game.Price,
-         DiscountPercent = game.DiscountPercent,
-         FinalPrice = game.DiscountPercent == null
-             ? game.Price
-             : game.Price - (game.Price * game.DiscountPercent.Value / 100),
-         ReleaseDate = game.ReleaseDate,
-         Developer = game.Developer,
-         Publisher = game.Publisher,
-         CoverImageUrl = game.CoverImageUrl
-     })
-     .ToListAsync();
+                .Select(game => new GameDto
+                {
+                    Id = game.Id,
+                    Title = game.Title,
+                    Description = game.Description,
+                    Price = game.Price,
+                    DiscountPercent = game.DiscountPercent,
+                    FinalPrice = game.DiscountPercent == null
+                        ? game.Price
+                        : game.Price - (game.Price * game.DiscountPercent.Value / 100),
+                    ReleaseDate = game.ReleaseDate,
+                    Developer = game.Developer,
+                    Publisher = game.Publisher,
+                    CoverImageUrl = game.CoverImageUrl,
+                    Images = game.Images.Select(i => i.ImageUrl).ToList(),
+                    Achievements = game.Achievements.Select(a => new UserAchievementDto
+                    {
+                        Id = a.Id,
+                        GameId = a.GameId,
+                        Title = a.Title,
+                        Description = a.Description,
+                        ImageUrl = a.ImageUrl
+                    }).ToList()
+                })
+                .ToListAsync();
 
             return Ok(result);
         }
-        
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetGameById(int id)
         {
-            var game = await _context.Games.FindAsync(id);
+            var game = await _context.Games
+                .Include(g => g.Images)
+                .Include(g => g.Achievements)
+                .FirstOrDefaultAsync(g => g.Id == id);
 
             if (game == null)
                 return NotFound();
@@ -64,7 +75,16 @@ namespace Server.Controllers
                 ReleaseDate = game.ReleaseDate,
                 Developer = game.Developer,
                 Publisher = game.Publisher,
-                CoverImageUrl = game.CoverImageUrl
+                CoverImageUrl = game.CoverImageUrl,
+                Images = game.Images?.Select(i => i.ImageUrl).ToList(),
+                Achievements = game.Achievements?.Select(a => new UserAchievementDto
+                {
+                    Id = a.Id,
+                    GameId = a.GameId,
+                    Title = a.Title,
+                    Description = a.Description,
+                    ImageUrl = a.ImageUrl
+                }).ToList()
             };
 
             return Ok(result);
@@ -119,7 +139,7 @@ namespace Server.Controllers
             var game = await _context.Games.FindAsync(id);
 
             if (game == null)
-                return NotFound(new { message = "Game not found" });
+                return NotFound(new { message = "Гру не знайдено" });
 
             try
             {
@@ -131,13 +151,13 @@ namespace Server.Controllers
                 _context.Games.Remove(game);
                 await _context.SaveChangesAsync();
 
-                return Ok(new { message = "Game deleted successfully" });
+                return Ok(new { message = "Гру видалено" });
             }
             catch (Exception ex)
             {
                 return BadRequest(new
                 {
-                    message = "Error while deleting game",
+                    message = "Помилка видалення",
                     error = ex.Message,
                     innerError = ex.InnerException?.Message
                 });

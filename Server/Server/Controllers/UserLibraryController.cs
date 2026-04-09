@@ -41,7 +41,9 @@ namespace Server.Controllers
                 {
                     x.GameId,
                     x.Game.Title,
-                    x.Game.Price
+                    x.Game.CoverImageUrl,
+                    PlayTimeHours = x.PlaytimeMinutes / 60.0,
+                    LastPlayed = x.LastTimePlayed
                 })
                 .ToListAsync();
 

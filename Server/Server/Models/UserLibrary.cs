@@ -12,6 +12,8 @@
 
         public int PlaytimeMinutes { get; set; } = 0;
 
+        public DateTime LastTimePlayed { get; set; } = DateTime.UtcNow;
+
         public User User { get; set; } = null!;
 
         public Game Game { get; set; } = null!;

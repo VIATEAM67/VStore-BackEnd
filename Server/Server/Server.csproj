@@ -19,13 +19,15 @@
 	  <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.0">
 		  <PrivateAssets>all</PrivateAssets>
 	  </PackageReference>
+	  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0" />
+	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
 	  <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
 	  <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="wwwroot\images\" />
+    <Folder Include="Migrations\" />
   </ItemGroup>
 
 </Project>

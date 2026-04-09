@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddScoped<BlobStorageService>();
 builder.Services.AddSingleton<FileLogger>();
+
 builder.Services.AddHttpLogging(logging =>
 {
     logging.LoggingFields =
@@ -19,17 +20,9 @@ builder.Services.AddHttpLogging(logging =>
         Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration;
 });
 
-
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("AZURE_SQL_CONNECTIONSTRING"),
-        sqlOptions =>
-        {
-            sqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null);
-        }));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("CONNECTIONSTRING")));
 
 builder.Services.AddCors(options =>
 {
@@ -41,8 +34,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-
 var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -73,17 +66,14 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 
 app.UseSession();
-
 app.UseHttpLogging();
 app.UseStaticFiles();
-
 app.UseHttpsRedirection();
-
-app.UseCors("AllowAll"); 
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 

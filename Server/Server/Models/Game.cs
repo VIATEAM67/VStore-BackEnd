@@ -43,5 +43,6 @@ namespace Server.Models
 
         public ICollection<WishList> WishListUsers { get; set; } = new List<WishList>();
         public ICollection<Achievement> Achievements { get; set; } = new List<Achievement>();
+
     }
 }

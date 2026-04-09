@@ -29,7 +29,7 @@ namespace Server.Controllers
         }
 
         [HttpGet("game/{gameId}")]
-        public async Task<ActionResult<IEnumerable<AchievementDto>>> GetGameAchievements(int gameId)
+        public async Task<ActionResult<IEnumerable<UserAchievementDto>>> GetGameAchievements(int gameId)
         {
             var gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
             if (!gameExists)
@@ -40,7 +40,7 @@ namespace Server.Controllers
             var achievements = await _context.Achievements
                 .Where(a => a.GameId == gameId)
                 .OrderBy(a => a.Id)
-                .Select(a => new AchievementDto
+                .Select(a => new UserAchievementDto
                 {
                     Id = a.Id,
                     GameId = a.GameId,
@@ -101,7 +101,7 @@ namespace Server.Controllers
 
         [Authorize]
         [HttpGet("my")]
-        public async Task<ActionResult<IEnumerable<AchievementDto>>> GetMyAchievements()
+        public async Task<ActionResult<IEnumerable<UserAchievementDto>>> GetMyAchievements()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrWhiteSpace(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
@@ -111,7 +111,7 @@ namespace Server.Controllers
                 .Where(ua => ua.UserId == userId)
                 .Include(ua => ua.Achievement)
                 .OrderByDescending(ua => ua.UnlockedAt)
-                .Select(ua => new AchievementDto
+                .Select(ua => new UserAchievementDto
                 {
                     Id = ua.Achievement.Id,
                     GameId = ua.Achievement.GameId,

@@ -1,0 +1,257 @@
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.CodeAnalysis.Differencing;
+using Microsoft.EntityFrameworkCore;
+using Server.Data;
+using Server.Models;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+
+namespace Server.Controllers
+{
+    [ApiController]
+    [Route("/admin")]
+    public class AdminController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+        private readonly IWebHostEnvironment _env;
+
+        private const string AdminUser = "admin";
+        private const string AdminPass = "777";
+
+        private readonly Dictionary<string, string> genreTranslation = new()
+        {
+            {"Action", "Екшн"},
+            {"Adventure", "Пригоди"},
+            {"RPG", "Рольові ігри (RPG)"},
+            {"Simulation", "Симулятор"},
+            {"Strategy", "Стратегія"},
+            {"Sports", "Спортивні"},
+            {"Puzzle", "Головоломка"},
+            {"Shooter", "Шутер"},
+            {"Horror", "Хорор"},
+            {"Racing", "Гонки"},
+            {"MMO", "ММО"}
+        };
+
+        public AdminController(AppDbContext context, IWebHostEnvironment env)
+        {
+            _context = context;
+            _env = env;
+        }
+
+        // GET /admin
+        [HttpGet("")]
+        public IActionResult Index([FromQuery] string? user, [FromQuery] string? pass)
+        {
+            if (user != AdminUser || pass != AdminPass)
+            {
+                var loginHtml = @"
+<html>
+<head>
+<meta charset='utf-8'>
+<title>Вхід Адміністратор</title>
+<link rel='stylesheet' href='/css/home.css'>
+</head>
+<body>
+<div class='container'>
+<h2>Вхід для Адміністратора</h2>
+<form method='get'>
+<input type='text' name='user' placeholder='Користувач'/>
+<input type='password' name='pass' placeholder='Пароль'/>
+<button type='submit'>Увійти</button>
+</form>
+</div>
+</body>
+</html>";
+                return Content(loginHtml, "text/html");
+            }
+
+            var games = _context.Games.ToList();
+            var genres = _context.Genres.ToList();
+
+            // Формируем опции жанров
+            var genreOptions = new StringBuilder();
+            foreach (var g in genres)
+            {
+                var ukrName = genreTranslation.ContainsKey(g.Name) ? genreTranslation[g.Name] : g.Name;
+                genreOptions.Append($"<option value='{g.Id}'>{ukrName}</option>");
+            }
+
+            // Формируем карточки игр
+            var gamesHtml = new StringBuilder();
+            foreach (var game in games)
+            {
+                var screenshotsHtml = string.Join("", _context.GameImages
+                    .Where(img => img.GameId == game.Id)
+                    .Select(img => $"<img src='{img.ImageUrl}' style='width:60px;height:60px;margin:2px;'/>"));
+
+                gamesHtml.Append($@"
+<div class='game-card' id='game-{game.Id}'>
+    <img src='{game.CoverImageUrl}'/>
+    <div class='game-info'>
+        <div><strong>{game.Title}</strong></div>
+        <div class='game-buttons'>
+            <button onclick='showInfo({game.Id})'>Інформація</button>
+            <button onclick='window.location=\" / admin / edit /{ game.Id}?user ={ AdminUser}
+                &pass ={ AdminPass}\"'>Редагувати</button>
+            < button onclick = 'deleteGame({game.Id})' > Видалити </ button >
+        </ div >
+    </ div >
+</ div >
+
+< div id = 'modal-{game.Id}' class='modal-bg' onclick='closeModal({game.Id})'>
+<div class='modal-content'>
+<h3>{game.Title
+    }</h3>
+<p>{game.Description
+}</ p >
+< p > Ціна: { game.Price}₴ { (game.DiscountPercent != null ? $"(Знижка {game.DiscountPercent}%)" : "")}</ p >
+< p > Розробник: { game.Developer}</ p >
+< p > Видавець: { game.Publisher}</ p >
+< div > Скріншоти: { screenshotsHtml}</ div >
+</ div >
+</ div > ");
+            }
+
+            var html = $@"
+<html>
+<head>
+<meta charset='utf-8'>
+<title>Адмін Панель</title>
+<link rel='stylesheet' href='/css/home.css'>
+<style>
+.container {{ width:90%; margin:20px auto; }}
+.game-card {{ display:flex; background:#fff; margin-bottom:15px; border-radius:8px; overflow:hidden; box-shadow:0 2px 5px rgba(0,0,0,0.1); }}
+.game-card img {{ width:120px; height:160px; object-fit:cover; }}
+.game-info {{ padding:10px; flex:1; display:flex; flex-direction:column; justify-content:space-between; }}
+.game-buttons button {{ margin-right:5px; }}
+.toast {{ position:fixed; top:20px; right:20px; background:#4caf50; color:#fff; padding:10px 20px; border-radius:5px; display:none; z-index:999; }}
+.modal-bg {{ position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:1000; }}
+.modal-content {{ background:#fff; padding:20px; border-radius:8px; width:400px; }}
+</style>
+</head>
+<body>
+<div class='container'>
+<h1>Адмін Панель</h1>
+<div id='toast' class='toast'>Гру додано!</div>
+
+<form id='addGameForm' enctype='multipart/form-data'>
+<input type='text' name='title' placeholder='Назва гри' required/>
+<input type='text' name='description' placeholder='Опис гри' required/>
+<input type='number' step='0.01' name='price' placeholder='Ціна (₴)' required/>
+<input type='number' name='discountPercent' placeholder='Знижка (%)'/>
+<input type='text' name='developer' placeholder='Розробник'/>
+<input type='text' name='publisher' placeholder='Видавець'/>
+<label>Обкладинка:</label>
+<input type='file' name='coverFile' required/>
+<label>Скріншоти:</label>
+<input type='file' name='screenshotFiles' multiple/>
+<select name='genreIds' multiple>{genreOptions}</select>
+<button type='submit'>Додати гру</button>
+</form>
+
+<div id='gamesList'>
+{gamesHtml}
+</div>
+</div>
+
+<script>
+const toast = document.getElementById('toast');
+document.getElementById('addGameForm').addEventListener('submit', async function(e){{
+    e.preventDefault();
+    const formData = new FormData(this);
+    const res = await fetch('/admin/add', {{ method:'POST', body:formData }});
+    if(res.ok){{ toast.style.display='block'; setTimeout(()=>toast.style.display='none',3000); setTimeout(()=>location.reload(),500); }}
+    else alert('Помилка додавання гри');
+}});
+function showInfo(id){{ document.getElementById('modal-'+id).style.display='flex'; }}
+function closeModal(id){{ document.getElementById('modal-'+id).style.display='none'; }}
+async function deleteGame(id){{
+    if(!confirm('Видалити гру?')) return;
+    const res = await fetch('/admin/delete/'+id);
+    if(res.ok) document.getElementById('game-'+id).remove();
+    else alert('Помилка видалення');
+}}
+</script>
+</body>
+</html>";
+
+return Content(html, "text/html");
+        }
+
+        // POST /admin/add
+        [HttpPost("add")]
+public IActionResult AddGame([FromForm] string title, [FromForm] string description,
+            [FromForm] decimal price, [FromForm] int? discountPercent,
+            [FromForm] string developer, [FromForm] string publisher,
+            [FromForm] int[] genreIds, [FromForm] IFormFile coverFile,
+            [FromForm] List<IFormFile> screenshotFiles)
+{
+    string coverUrl = "/images/default_cover.png";
+    if (coverFile != null && coverFile.Length > 0)
+    {
+        var coverPath = Path.Combine(_env.WebRootPath, "images", coverFile.FileName);
+        using var stream = new FileStream(coverPath, FileMode.Create);
+        coverFile.CopyTo(stream);
+        coverUrl = "/images/" + coverFile.FileName;
+    }
+
+    var game = new Game
+    {
+        Title = title,
+        Description = description,
+        Price = price,
+        DiscountPercent = discountPercent,
+        Developer = developer,
+        Publisher = publisher,
+        CoverImageUrl = coverUrl,
+        ReleaseDate = DateTime.Now
+    };
+
+    _context.Games.Add(game);
+    _context.SaveChanges();
+
+    foreach (var genreId in genreIds)
+        _context.GameGenres.Add(new GameGenre { GameId = game.Id, GenreId = genreId });
+
+    if (screenshotFiles != null)
+    {
+        foreach (var file in screenshotFiles)
+        {
+            if (file.Length > 0)
+            {
+                var path = Path.Combine(_env.WebRootPath, "images", file.FileName);
+                using var stream = new FileStream(path, FileMode.Create);
+                file.CopyTo(stream);
+                _context.GameImages.Add(new GameImage { GameId = game.Id, ImageUrl = "/images/" + file.FileName });
+            }
+        }
+    }
+
+    _context.SaveChanges();
+    return Ok();
+}
+
+// GET /admin/delete/{id}
+[HttpGet("delete/{id}")]
+public IActionResult DeleteGame(int id)
+{
+    var game = _context.Games.Find(id);
+    if (game != null)
+    {
+        var screenshots = _context.GameImages.Where(i => i.GameId == id);
+        _context.GameImages.RemoveRange(screenshots);
+
+        var genres = _context.GameGenres.Where(g => g.GameId == id);
+        _context.GameGenres.RemoveRange(genres);
+
+        _context.Games.Remove(game);
+        _context.SaveChanges();
+    }
+    return Ok();
+}
+    }
+}

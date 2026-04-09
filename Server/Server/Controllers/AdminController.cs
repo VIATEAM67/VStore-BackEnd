@@ -368,7 +368,7 @@ namespace Server.Controllers
                     Developer = developer,
                     Publisher = publisher,
                     CoverImageUrl = finalCoverUrl,
-                    ReleaseDate = releaseDate
+                    ReleaseDate = DateTime.SpecifyKind(releaseDate, DateTimeKind.Utc)
                 };
 
                 _context.Games.Add(game);
@@ -742,7 +742,7 @@ namespace Server.Controllers
                 game.Title = title;
                 game.Description = description;
                 game.Price = price;
-                game.ReleaseDate = releaseDate;
+                game.ReleaseDate = DateTime.SpecifyKind(releaseDate, DateTimeKind.Utc);
                 game.DiscountPercent = discountPercent;
                 game.Developer = developer;
                 game.Publisher = publisher;

@@ -42,7 +42,7 @@ namespace Server.Controllers
                     u.Role,
                     u.LvlAcc,
                     u.CreatedAt,
-                    ProfilePictureUrl = u.ProfilePictureUrl ?? "/images/default-avatar.jpg"
+                    ProfilePictureUrl = u.ProfilePictureUrl ?? "https://vstorestorage01.blob.core.windows.net/avatars/default-avatar.jpg"
                 })
                 .FirstOrDefaultAsync();
 

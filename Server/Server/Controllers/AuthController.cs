@@ -74,7 +74,9 @@ namespace Server.Controllers
                     user.Username,
                     user.Email,
                     user.Role,
-                    user.LvlAcc
+                    user.LvlAcc,
+                    user.CreatedAt,
+                    ProfilePictureUrl = user.ProfilePictureUrl ?? "https://vstorestorage01.blob.core.windows.net/avatars/default-avatar.jpg"
                 }
             });
 
@@ -106,7 +108,9 @@ namespace Server.Controllers
                     user.Username,
                     user.Email,
                     user.Role,
-                    user.LvlAcc
+                    user.LvlAcc,
+                    user.CreatedAt,
+                    ProfilePictureUrl = user.ProfilePictureUrl ?? "https://vstorestorage01.blob.core.windows.net/avatars/default-avatar.jpg"
                 }
             });
 
