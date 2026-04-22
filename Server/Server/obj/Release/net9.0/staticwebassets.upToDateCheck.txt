@@ -1,0 +1,6 @@
+wwwroot\css\home.css
+wwwroot\css\admin.css
+wwwroot\css\logs.css
+D:\Project\VStore-Back\VStore-BackEnd\Server\Server\wwwroot\css\home.css
+D:\Project\VStore-Back\VStore-BackEnd\Server\Server\wwwroot\css\admin.css
+D:\Project\VStore-Back\VStore-BackEnd\Server\Server\wwwroot\css\logs.css

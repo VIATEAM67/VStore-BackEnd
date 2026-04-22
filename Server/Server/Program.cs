@@ -3,16 +3,26 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Server.Data;
 using System.Text;
+using Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
+builder.Services.AddScoped<BlobStorageService>();
+builder.Services.AddSingleton<FileLogger>();
+
+builder.Services.AddHttpLogging(logging =>
+{
+    logging.LoggingFields =
+        Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod |
+        Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath |
+        Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode |
+        Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration;
+});
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("AZURE_SQL_CONNECTIONSTRING")));
-
-
-builder.Services.AddControllers();
-
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("CONNECTIONSTRING")));
 
 builder.Services.AddCors(options =>
 {
@@ -24,8 +34,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-
 var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -48,25 +58,49 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+app.UseSession();
+app.UseHttpLogging();
+app.UseStaticFiles();
 app.UseHttpsRedirection();
-
-app.UseCors("AllowAll"); 
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    var logger = context.RequestServices.GetRequiredService<FileLogger>();
+    var start = DateTime.Now;
+
+    try
+    {
+        logger.Log("INFO", $"HTTP {context.Request.Method} {context.Request.Path} — початок обробки");
+
+        await next();
+
+        var duration = (DateTime.Now - start).TotalMilliseconds;
+
+        logger.Log("INFO",
+            $"HTTP {context.Request.Method} {context.Request.Path} — статус {context.Response.StatusCode}, час {duration:F0} мс");
+    }
+    catch (Exception ex)
+    {
+        logger.Log("ERROR",
+            $"HTTP {context.Request.Method} {context.Request.Path} — помилка: {ex.Message}");
+
+        throw;
+    }
+});
 
 app.MapControllers();
 app.Run();

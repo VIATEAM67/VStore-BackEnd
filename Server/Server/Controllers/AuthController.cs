@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Server.Data;
 using Server.DTO.Auth;
 using Server.Models;
+using Server.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -16,56 +17,103 @@ namespace Server.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
+        private readonly FileLogger _logger;
 
-        public AuthController(AppDbContext context, IConfiguration config)
+        public AuthController(AppDbContext context, IConfiguration config, FileLogger logger)
         {
             _context = context;
             _config = config;
+            _logger = logger;
         }
 
-        // POST: api/auth/register
+        private async Task<string> GenerateUsername()
+        {
+            int count = await _context.Users.CountAsync();
+            return $"Nickname_{count + 1}";
+        }
+
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDTO dto)
         {
+            _logger.Log("INFO", $"Запрос на регистрацию. Email: {dto.Email}");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
+            {
+                _logger.Log("WARN", $"Попытка регистрации с существующим email: {dto.Email}");
                 return BadRequest(new { message = "Пользователь с таким Email уже существует" });
+            }
+                
+
+            var username = await GenerateUsername();
 
             var user = new User
             {
+                Username = username,
                 Email = dto.Email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
                 Role = "User",
+                LvlAcc = 1,
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            _logger.Log("INFO", $"Пользователь зарегистрирован: id={user.Id}");
+
             var token = GenerateJwtToken(user);
 
             return Ok(new
             {
                 token,
-                user = new { user.Id, user.Email, user.Role }
+                user = new
+                {
+                    user.Id,
+                    user.Username,
+                    user.Email,
+                    user.Role,
+                    user.LvlAcc,
+                    user.CreatedAt,
+                    ProfilePictureUrl = user.ProfilePictureUrl ?? "https://vstorestorage01.blob.core.windows.net/avatars/default-avatar.jpg"
+                }
             });
+
+
         }
 
-        // POST: api/auth/login
+     
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] UserLoginDTO dto)
         {
+            _logger.Log("INFO", $"Попытка входа: {dto.Email}");
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
 
             if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+            {
+                _logger.Log("WARN", $"Неудачная попытка входа. Email: {dto.Email}");
                 return Unauthorized(new { message = "Неверный Email или пароль" });
-
+            }
+            
             var token = GenerateJwtToken(user);
+            _logger.Log("INFO", $"Успешный вход: id={user.Id}");
 
             return Ok(new
             {
                 token,
-                user = new { user.Id, user.Email, user.Role }
+                user = new
+                {
+                    user.Id,
+                    user.Username,
+                    user.Email,
+                    user.Role,
+                    user.LvlAcc,
+                    user.CreatedAt,
+                    ProfilePictureUrl = user.ProfilePictureUrl ?? "https://vstorestorage01.blob.core.windows.net/avatars/default-avatar.jpg"
+                }
             });
+
         }
 
         private string GenerateJwtToken(User user)
